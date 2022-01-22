@@ -46,6 +46,30 @@ TODO: flesh this out with an example; something like select entry of a list for 
 >MVU separates behavior from state very strictly by making state immutable and putting behavior into an **update** function.
 
 
+## Blazor.Mvu Design Goals
+Many implementations of MVU describe the view in code. Even the new [.NET MAUI](https://devblogs.microsoft.com/dotnet/introducing-net-multi-platform-app-ui/) implementation does this (much to my consternation, I must say).
+
+However, many developers have come to like describing the view in a declarative syntax, usually some XML dialect. There is considerable knowledge and tooling supporting that syntax. Furthermore, in particular when working on web apps, we often work together with designers who understand that kind of declarative syntax very well because they know HTML, but don't understand regular code at all. Describing the view in code throws away all these advantages.
+
+Thus, the probably most important design goal of **Blazor.Mvu** was and is to keep declarative syntax for views unchanged. In Blazor terms that means all the razor files you know and have continue to exist, with only minor adaptations that pertain to binding. 
+
+So, you can continue to use your existing tools and also make use of any future editors for Razor that might come out. You don't have to learn a new DSL just to describe a view. You can seamlessly integrate the myriads of component libraries out there. And your colleague, the designer, will be happy to hear that they still can understand and edit your views.
+
+Another design goal is almost as important: **Blazor.Mvu** should not force you to go all the way if you cannot or don't want to. In other words, it is possible to use **Blazor.Mvu** in three modes:
+
+* you create a greenfield application where all frameworks/components you use integrate easily with Blazor.Mvu: in this case, you just **Blazor.Mvu** for the whole application, including any custom controls you might create.
+* you create a greenfield application, but some of the components you use do not work with **Blazor.Mvu** (the reason for this can be when they somehow depend on your views inheriting from `ComponentBase` instead of another implementation of `IComponent` because **Blazor.Mvu** doesn't use `ComponentBase`); in this scenario, you can use **Blazor.Mvu** for all the parts where it makes sense and wrap the problematic components
+* you have an existing application and want to use **Blazor.Mvu** just for the new parts
+
+Another very important goal is that using **Blazor.Mvu** does not require you to switch to a purely functional language like F#. While F# is super interesting and there are already very interesting MVU frameworks out for it, for example the excellent [Bolero](https://fsbolero.io/), the reality for 90% of developers is that they simply can't introduce another language into their workplace, no matter how beneficial it might be. 
+
+So, you can use **Blazor.Mvu** with C#, and it is actually implemented in C#, to ensure that usage of it will always stay idiomatic. However, in the future I hope to add F# wrappers that allow idiomatic use from F#, too. 
+
+And last not least, as with any good framework, there is the design goal that using **Blazor.Mvu** should be comfortable, unsurprising and not require you to repeat yourself. 
+
+
+
+## How to use it
 
 
 
