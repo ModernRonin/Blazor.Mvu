@@ -17,7 +17,7 @@ However, I put this public and online in the hopes of finding other people who w
 * coming up with a logo :-)
 
 ## MVU
-There are very good explanations of the MVU pattern out there, for example [here](https://thomasbandt.com/model-view-update), and if you've found this repository, I kinda assume you know what MVU is and are looking for a way to use it with Blazor.
+There are very good explanations of the MVU pattern out there, for example [here](https://guide.elm-lang.org/architecture/), and if you've found this repository, I kinda assume you know what MVU is and are looking for a way to use it with Blazor.
 
 That being said, let me name a few important design goals that this pattern solves:
 
