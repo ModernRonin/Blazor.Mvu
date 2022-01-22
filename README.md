@@ -558,6 +558,15 @@ public class MyViewStateSerializer : ISerializer
 }
 ```
 
+### Logging
+Sometimes displaying the state is not enough, in particular when developing on the framework itself. For these scenarios there are several different logs you can activate. You do that by injecting `LoggerSettings` (which gets registered by `builder.AddBlazorMvu(GetType().Assembly)` as single-instance) and settings any of its properties to `true`:
+* DoLogMessages will log out all messages together when they are processed by an updater together with the state before and after the update
+* DoLogParameters will log whenever the parameters of any MVU view are being set by Blazor's engine
+* DoLogRender will log whenever a view is being rendered
+
+All log messages are logged to the browser's console.
+
+
 
 ### Updater abstract helpers
 
