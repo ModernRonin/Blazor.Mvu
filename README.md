@@ -47,7 +47,7 @@ TODO: flesh this out with an example; something like select entry of a list for 
 
 
 ## Design Goals
-Many implementations of MVU describe the view in code. Even the new [.NET MAUI](https://devblogs.microsoft.com/dotnet/introducing-net-multi-platform-app-ui/) implementation does this (much to my consternation, I must say).
+Many implementations of MVU describe the view in code. Even the new [.NET MAUI](https://devblogs.microsoft.com/dotnet/introducing-net-multi-platform-app-ui/) implementation does this (much to my surprise).
 
 However, many developers have come to like describing the view in a declarative syntax, usually some XML dialect. There is considerable knowledge and tooling supporting that syntax. Furthermore, in particular when working on web apps, we often work together with designers who understand that kind of declarative syntax very well because they know HTML, but don't understand regular code at all. Describing the view in code throws away all these advantages.
 
@@ -168,6 +168,21 @@ These same two methods, with a minor variation for `InitializeAsync`, you will i
 
 Note also that Updater doesn't depend on anything Blazor or view-specific. In principle, it could live in a separate library that knows nothing about your views, let alone the particular tech-stack (Blazor) used by them.
 
+As mentioned before, often you want to perform some potentially lengthy work at application startup without blocking your UI from rendering. The updater above reacts to a `LoadInitialData` to do just that. But who sends that message and when?
+
+Any MVU view has a property `InitMsg`. If that property is set, then this message will be sent exactly once during a view's lifetime, after it has been rendered for the first time. 
+
+Depending on your scenario, you can set that property via bindings `<MyComponent InitMsg="...">` or via code. In the case of `App`, there is nothing that could bind to it, so it has to be code. So you'd append the following to the bottom `App.razor`:
+
+@code
+{
+    public App() => InitMsg = new LoadInitialData();
+}
+
+This is one of the very few scenarios using **Blazor.Mvu** requiring you to write any code (via `@code` directive or code-behind file) for a view. Unfortunately, Razor currently doesn't allow us to define custom directives, but if that feature comes at some point, **Blazor.Mvu** could use that mechanism to allow you to replace the above with a simple
+`@initMsg new LoadInitialData()`. 
+
+
 For now, we saw how to generate the view/state/message/updater tuple for the whole application. 
 
 But **Blazor.Mvu** distinguishes three different entities:
@@ -179,7 +194,7 @@ For each of these entities, there is an abstract base view that your view must i
 
 *Applications* we already looked at.
 
-Let's look at a more complex example that combines *pages* and *components*:
+Let's look at a more complex example that combines *pages* and *components*. (I'm using the awesome [MudBlazor component library](https://mudblazor.com/), so anything prefixed with `Mud` is just an existing component.)
 
 First create `Sandbox.razor`:
 ```razor
@@ -202,5 +217,155 @@ First create `Sandbox.razor`:
 <MudDivider/>
 ```
 
-Note how you reference the state of the application here with `Logic.App.State`. This is because pages define their state as in relation to a source/parent state. 
+Note how you reference the state of the application here with `Logic.App.State`. This is because pages define their state as in relation to the application state. This is illustrated by the interface 
+```csharp
+public interface IPageUpdater<TState, in TAppState> : IUpdater<TState>
+{
+    Task<TState> InitializeAsync(TAppState appState);
+}
+``` 
+which `Logic.Sandbox.Updater` implements, as we will see in a bit.
+
+But first let us go through the declarations in the view:
+* `<Settings Value="State.Settings">` includes a custom *component* and *one-way-binds* a property of `State` to it. 
+* `<Undoable ...>` includes another custom *component*, this one more like a custom control that you might write to include in a component library, binds it again against a `State` property and defines which message should be sent when that component tells us it wants to change it's bound value. 
+* `<MudNumericField>` is nested in `<Undoable>` and a regular, non-MVU component from MudBlazor; the `ValueChanged` binding interacts with its owning `<Undoable>`
+* `<SandboxResults...>` includes a view that doesn't generate any messages (we'll come to that at the end, as it's more of a special case)
+* `<UserManagement...>` is another custom *component* that is bound against a property of `State` and translates value changes to a message
+
+Now let us look at the `State`, `Updater`and *messages* for `Logic.Sandbox`:
+
+```csharp
+namespace Logic.Sandbox;
+
+public record State(AccountSettings Settings,
+    ImmutableArray<string> Users,
+    Money OpenVolume)
+{
+    public IImmutableDictionary<string, Money> OpenPerUser =>
+        Settings.Sharing.Share(OpenVolume.Amount, Users, Users.FirstOrDefault())
+            .ToImmutableDictionary(kvp => kvp.Key, kvp => new Money(kvp.Value, Currency.Default));
+}
+
+public record UpdateVolume(decimal Volume);
+
+public record UpdateUsers(ImmutableArray<string> Users);
+
+public class Updater : IPageUpdater<State, App.State>
+{
+    public Task<State> InitializeAsync(App.State appState)
+    {
+        var settings = AccountSettings.Default;
+        var users = ImmutableArray<string>.Empty.Add("Bob").Add("Alice").Add("Charlie");
+        return Task.FromResult(new State(settings,
+            users,
+            Money.Zero(settings.Currency)));
+    }
+
+    public Task<State> UpdateAsync(State state, object msg) =>
+        Task.FromResult(msg switch
+        {
+            UpdateName m => state with { Settings = state.Settings with { Name = m.Name } },
+            UpdateCurrency m => state with
+            {
+                Settings = state.Settings with { Currency = m.Currency },
+                OpenVolume = state.OpenVolume with { Currency = m.Currency }
+            },
+            UpdateSharing m => state with { Settings = state.Settings with { Sharing = m.Sharing } },
+            UpdateVolume m  => state with { OpenVolume = state.OpenVolume with { Amount = m.Volume } },
+            UpdateUsers m   => state with { Users = m.Users },
+            _               => default
+        });
+}
+```
+The `State`and messages are pretty straight-forward (forget about `State.OpenPerUser`'s implementation for now, that's a detail of the domain and has nothing to do with **Blazor.Mvu**).
+
+`Updater` is very similar to the other updater we already saw, but the signature of it's `InitializeAsync` method differs: where the updater for the whole application had no arguments for this method, updaters for *pages* are passed the current application state. Our `Updater`uses that to calculate the initial `Logic.Sandbox.State` for the view.
+
+Again, state and message are completely immutable, and the updater holds no state at all (but could have c'tor injected dependencies, for example to send updated state to some backend proxy).
+
+Interestingly, we see only two messages defined here, but `Updater` reacts on a few others. Where do they come from?
+
+They are defined by the *components* referenced in the view, actually all by the `Settings` component which we will look at now.
+
+The `Settings` component consists, like all MVU elements, of 4 parts: a view, a state, and updater and messages.
+By the way, how you organize these in terms of namespaces and code-files is up to you. My own current practice is as follows:
+
+* a namespace `Views`, this only contains razor files
+* another namespace `Logic` with nested namespaces for the application, every page and every component, so there's `Logic.App`, `Logic.Sandbox`, `Logic.Settings`, `Logic.Undoable`, `Logic.UserManagement` and so on
+* in each `Logic.ComponentName` namespace I have 3 code-files: 
+    * `State.cs` which contains only the state and any needed additional types, 
+    * `Updater.cs` which contains the updater
+    * `Messages.cs` which contains records for all messages the component defines - here I use one code-file for all of them because they tend to be rather short; sometimes a component doesn't define any messages, then this file doesn't exist
+
+Here's the view for `Settings`:
+```razor
+@using Logic.Settings
+@inherits AStandardComponentMvuView<State, Updater, AccountSettings>
+
+<Undoable T="string" Value="@State.Value.Name" ValueChanged="Msg<string>(n => new UpdateName(n))">
+    <MudTextField Label="Name" Value="@context.Value" ValueChanged="context.HandleChange" 
+                  Immediate="true" DebounceInterval="150"/>
+</Undoable>
+<Undoable T="Currency" Value="@State.Value.Currency" ValueChanged="Msg<Currency>(c=>new UpdateCurrency(c))">
+    <MudAutocomplete Label="Home Currency" Value="@context.Value" ValueChanged="context.HandleChange"
+                     SearchFunc="p => Task.FromResult(State.FindCurrency(p))" ToStringFunc="c => c.IsoCode">
+        <ItemTemplate Context="currency">
+            <MudText>
+                <Flag Value="@currency.CountryCode"/> @currency.IsoCode
+            </MudText>
+        </ItemTemplate>
+    </MudAutocomplete>
+</Undoable>
+<Undoable T="ISharingStrategy" Value="@State.Value.Sharing" ValueChanged="Msg<ISharingStrategy>(s => new UpdateSharing(s))" 
+          OnValidate="s => s.IsValid">
+    <SharingStrategy Value="@context.Value" ValueChanged="context.HandleChange"/>
+</Undoable>
+```
+
+It contains all kinds of other nested stuff, but for our tutorial only the following lines are relevant:
+
+* the `@inherits` line specifies that this is a *component* - compare this with *page* and *application* declarations we already saw
+* the several `<Undoable>`s fire the messages we were missing in the definition of `Sandbox`, for example `UpdateName`
+
+Now let's look at state, messages and updater:
+```csharp
+namespace Logic.Settings;
+
+public record State(AccountSettings Value, Func<ImmutableArray<Currency>> AvailableCurrencies)
+    : IComponentState<AccountSettings>
+{
+    public IEnumerable<Currency> FindCurrency(string pattern) =>
+        AvailableCurrencies()
+            .Where(c =>
+                c.IsoCode.Contains(pattern, StringComparison.CurrentCultureIgnoreCase));
+}
+
+public record UpdateSharing(ISharingStrategy Sharing);
+
+public record UpdateName(string Name);
+
+public record UpdateCurrency(Currency Currency);
+
+public class Updater : AComponentUpdater<State, AccountSettings>
+{
+    readonly ICurrencyProvider _currencyProvider;
+
+    public Updater(ICurrencyProvider currencyProvider) => _currencyProvider = currencyProvider;
+
+    public override State Initialize(AccountSettings value) =>
+        new(value ?? AccountSettings.Default,
+            () => _currencyProvider.AvailableCurrencies.ToImmutableArray());
+
+    public override Task<State> UpdateAsync(State state, object msg) => DontProcess(msg);
+}
+```
+
+`State` and messages are, as usual, rather straight-forward. The only interesting thing about them is perhaps the function of the `State.FindCurrency` method. It illustrates how you deal with (external) components like `<MudAutoComplete>` that require you to pass in a lambda, but that lambda is dependent on data that might change from outside your view/component, in our case the list of available currencies. 
+
+The list of available currencies is loaded only once, at app startup, from a backend API. That means it is not availanble immediately, but at the same time it is being used by sub-components like `Settings`. So `Settings` must be able to work when there are no currencies loaded yet and also deal with updates to the available currencies.
+
+To do this, our updater c'tor injects an interface `ICurrencyProvider`. The implementation of that interface really has nothing do with MVU. If you wished, you could query an API, a memory cache, whatever. 
+
+
 
