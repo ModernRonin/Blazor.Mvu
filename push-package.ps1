@@ -9,7 +9,7 @@ if (-not $nugetApiKey)
 
 if (-not $version) 
 {
-	[xml]$xml= Get-Content .\ModernRonin.ProjectRenamer\release.history
+	[xml]$xml= Get-Content .\release.history
 	$version= $xml.Project.PropertyGroup.Version.ToString()
 }
 if (-not $version) 
@@ -19,4 +19,5 @@ if (-not $version)
 }
 
 dotnet pack --configuration Release
-dotnet nuget push .\ModernRonin.ProjectRenamer\nupkg\ModernRonin.ProjectRenamer.$version.nupkg -s https://api.nuget.org/v3/index.json --api-key $nugetApiKey
+dotnet nuget push .\Blazor.Mvu\nupkg\Blazor.Mvu.$version.nupkg -s https://api.nuget.org/v3/index.json --api-key $nugetApiKey
+dotnet nuget push .\Blazor.Mvu.Autofac\nupkg\Blazor.Mvu.Autofac.$version.nupkg -s https://api.nuget.org/v3/index.json --api-key $nugetApiKey
