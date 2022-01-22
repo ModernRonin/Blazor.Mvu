@@ -95,6 +95,7 @@ where `MyModule` is an Autofac module. In that module do your registrations as y
 ```csharp
 builder.AddBlazorMvu(GetType().Assembly);
 ```
+Amongst other things, this line automatically registers all updaters and your implementations of `IApplicationStateHolder<>` and `ISerializer` (see later) for you, so you don't have to do that manually. 
 
 Note that you could also pass multiple assemblies if your views, states, messages and updaters reside in multiple assemblies.
 
@@ -280,7 +281,7 @@ public class Updater : IPageUpdater<State, App.State>
 ```
 The `State`and messages are pretty straight-forward (forget about `State.OpenPerUser`'s implementation for now, that's a detail of the domain and has nothing to do with **Blazor.Mvu**).
 
-`Updater` is very similar to the other updater we already saw, but the signature of it's `InitializeAsync` method differs: where the updater for the whole application had no arguments for this method, updaters for *pages* are passed the current application state. Our `Updater`uses that to calculate the initial `Logic.Sandbox.State` for the view.
+`Updater` is very similar to the other updater we already saw, but the signature of it's `InitializeAsync` method differs: where the updater for the whole application had no arguments for this method, updaters for *pages* are passed the current application state. Our `Updater`uses that to calculate the initial `Logic.Sandbox.State` for the view. Whenever the application state changes, this method will be called again.
 
 Again, state and message are completely immutable, and the updater holds no state at all (but could have c'tor injected dependencies, for example to send updated state to some backend proxy).
 
@@ -347,17 +348,21 @@ public record UpdateName(string Name);
 
 public record UpdateCurrency(Currency Currency);
 
-public class Updater : AComponentUpdater<State, AccountSettings>
+public class Updater : IComponentUpdater<State, AccountSettings>
 {
     readonly ICurrencyProvider _currencyProvider;
 
     public Updater(ICurrencyProvider currencyProvider) => _currencyProvider = currencyProvider;
 
-    public override State Initialize(AccountSettings value) =>
-        new(value ?? AccountSettings.Default,
-            () => _currencyProvider.AvailableCurrencies.ToImmutableArray());
+    public Task<State> InitializeAsync(AccountSettings value) =>
+        Task.FromResult(new(value ?? AccountSettings.Default,
+            () => _currencyProvider.AvailableCurrencies.ToImmutableArray()));
 
-    public override Task<State> UpdateAsync(State state, object msg) => DontProcess(msg);
+    public override Task<State> UpdateAsync(State state, object msg) =>
+        Task.FromResult<TState>(msg switch
+        {
+            _ => default
+        });
 }
 ```
 
@@ -367,5 +372,68 @@ The list of available currencies is loaded only once, at app startup, from a bac
 
 To do this, our updater c'tor injects an interface `ICurrencyProvider`. The implementation of that interface really has nothing do with MVU. If you wished, you could query an API, a memory cache, whatever. 
 
+Because `Settings` is a *component*, the updater implements the following interface
+```csharp
+public interface IComponentUpdater<TState, in TValue> : IUpdater<TState>
+    where TState : IComponentState<TValue>
+{
+    Task<TState> InitializeAsync(TValue argument);
+}
+```
+
+This time, the signature of `InitializeAsync` gets a `TValue` passed in. As you probably have guessed, this corresponds to the `Value` property bindable on *components*. As you can see, `TState` has a constraint to be an `IComponentState<TValue>`. This in turn is defined as
+```csharp
+public interface IComponentState<out TValue>
+{
+    TValue Value { get; }
+}
+```
+
+What's going on here? Every *component* has a bindable `Value` property. When you define the view, you specify the type of that property via the `@inherit` directive. For `Settings`, this was `@inherits AStandardComponentMvuView<State, Updater, AccountSettings>` - the first generic parameter specified the state, as with other views, the second the updater, again nothing new, but the third parameter defined the type of `Value`.
+
+Your updater's `InitializeAsync` method will be called whenever `Value`changes via its binding, giving you the possibility to (re-)initialize your state.
+
+The last thing to note about `Setting`'s updater is that it doesn't handle any messages. Why? Because it doesn't know what to do when, for example, a name changes. Instead, as we saw earlier, we want this to be handled on the higher level of `Sandbox`'s updater.
+
+As stated before, messages not handled by an updater are automatically bubbled up the chain of containing views/updaters until handled. Components bubble up to any surrounding compoents or to the page they are embedded in. Pages bubble up to the App. If even the App doesn't handle the message, then we assume you've simply forgotten or not yet gotten round to implement the handler and issue a warning in the browser console.
 
 
+With this we've walked through almost everything you need to know to start using **Blazor.Mvu**. The only other thing you absolutely **need** to know about is the interface `IApplicationStateHolder<>`. 
+
+Your top-level state, the state of `App` needs to be held somewhere. While up until here everything was immutable, in the end somewhere we do need a mutable memory location to hold what the current state of the application is. This is where `IApplicationStateHolder<>` comes in. It's definition is fairly simple:
+```csharp
+public interface IApplicationStateHolder<TState>
+{
+    TState State { get; set; }
+}
+```
+Your application **must define one implementation of this interface**. (It will automatically be registered as single instance for you by `builder.AddBlazorMvu(GetType().Assembly)`.)
+
+You may wonder: why is this an interface and not a class, so that you wouldn't have to implement it?
+
+Because it is *extremely* likely that eventually you will want to implement more than just this in your application state holder and if it was a class instead of an interface, we'd take away the one base class allowed in C#. 
+
+Why implement other interfaces?
+
+Do you remember when we talked about fetching the list of available currencies once at startup, while making it available to any updater interested?
+
+It turns out the easiest and most elegant way to do this is by making your application state holder implement `ICurrencyProvider`, too, like this:
+
+```csharp
+using Logic.App;
+public class ApplicationStateHolder : IApplicationStateHolder<State>, ICurrencyProvider,
+{
+    public State State { get; set; } = State.Empty;
+    public IEnumerable<Currency> AvailableCurrencies => State.AvailableCurrencies;
+}
+```
+
+Your `App` view defined `LoadInitialData` as the message to be fired after initial rendering.`Logic.App.Updater` reacts to that message by, amongst other things, updating your app state with the currencies loaded from some backend. As you app state updates, the property `ApplicationStateHolder.State` gets updated. As this updates, the computed property `AvailableCurrencies` updates, too, and so any consumer of `ICurrencyProvider` will get an up-to-date list of currencies.
+
+## Debugging
+
+
+## Updater abstract helpers
+
+
+## Custom Controls
