@@ -430,10 +430,136 @@ public class ApplicationStateHolder : IApplicationStateHolder<State>, ICurrencyP
 
 Your `App` view defined `LoadInitialData` as the message to be fired after initial rendering.`Logic.App.Updater` reacts to that message by, amongst other things, updating your app state with the currencies loaded from some backend. As you app state updates, the property `ApplicationStateHolder.State` gets updated. As this updates, the computed property `AvailableCurrencies` updates, too, and so any consumer of `ICurrencyProvider` will get an up-to-date list of currencies.
 
-## Debugging
+## Advanced topics
+### Debugging
+When using **Blazor.Mvu** together with the awesome hot-reloading capabilities of VS2022, you will find that fairly often you want to look at the current state of a *page* or *component*, sometimes even the *application*.
+
+To make this easier, all MVU views define a bindable property `ShowDebugState` so you can write for example:
+```razor
+<MyComponent ShowDebugState="true">
+```
+When this property is true, the state associated with the view will be displayed beneath it. However, for this feature to work, you need to to implement the interface `ISerializer` (if you do, your implementation will be automatically registered by `builder.AddBlazorMvu(GetType().Assembly)`):
+```csharp
+public interface ISerializer
+{
+    string Serialize(object obj);
+}
+```
+Debug state display will use the `Serialize` method to generate the debug representation of your state.
+
+In my own usage, I implement that interface using [Json.net](https://www.newtonsoft.com/json). because JSON makes for a very natural and easy-on-the-eye display of typical state objects.
+
+But there are two caveats: 
+* if you have state that uses polymorph members - I do -, you'll need the superb extension of json.net [JsonSubTypes](https://github.com/manuc66/JsonSubTypes)
+* if you have state that contains lambdas - remember the state of the `Settings` component in the tutorial? - then you want to exclude them from serialization lest you get exceptions
+
+Because all this is a bit of work, I present a more or less ready-made type combining all this here. (It's not included in **Blazor.Mvu** because that would force dependencies on two other libraries on users who maybe don't use Json.net.)
+
+```csharp
+using System.Reflection;
+using JsonSubTypes;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
+
+public class NewtonsoftJsonSerializer
+{
+    readonly Lazy<JsonSerializerSettings> _settings;
+    public NewtonsoftJsonSerializer() => _settings = new Lazy<JsonSerializerSettings>(Create);
+
+    public void Configure(JsonSerializerSettings settings)
+    {
+        settings.ContractResolver = new IgnoreDelegateTypesContractResolver();
+        foreach (var converter in TypeHierarchyBaseTypes.Select(t => TypeHierarchyConverter(t))
+                     .Concat(AdditionalConverters)) settings.Converters.Add(converter);
+    }
+
+    public JsonSerializerSettings Settings => _settings.Value;
+
+    JsonSerializerSettings Create()
+    {
+        var result = new JsonSerializerSettings { Formatting = Formatting.Indented };
+        Configure(result);
+        return result;
+    }
+
+    static JsonConverter TypeHierarchyConverter(Type type, string discriminatorProperty = "type")
+    {
+        var subTypes = type.Assembly.GetTypes().Where(t => !t.IsAbstract && t.IsAssignableTo(type));
+        var builder = JsonSubtypesConverterBuilder.Of(type, discriminatorProperty);
+        foreach (var subType in subTypes) builder.RegisterSubtype(subType, subType.Name);
+        return builder.SerializeDiscriminatorProperty().Build();
+    }
+
+    class IgnoreDelegateTypesContractResolver : DefaultContractResolver
+    {
+        protected override JsonProperty CreateProperty(MemberInfo member,
+            MemberSerialization memberSerialization)
+        {
+            var result = base.CreateProperty(member, memberSerialization);
+            if (member is PropertyInfo pi && pi.PropertyType.IsAssignableTo(typeof(Delegate)))
+                result.Ignored = true;
+            return result;
+        }
+    }
+
+    protected virtual IEnumerable<JsonConverter> AdditionalConverters { get; } =
+        Enumerable.Empty<JsonConverter>();
+
+    protected virtual IEnumerable<Type> TypeHierarchyBaseTypes { get; } = Enumerable.Empty<Type>();
+}
+```
+
+You can use it to create a general serializer for your app for example like so:
+```csharp
+public class MyGeneralSerializer : NewtonsoftJsonSerializer
+{
+    protected override IEnumerable<JsonConverter> AdditionalConverters
+    {
+        get
+        {
+            yield return new CurrencyConverter();
+            yield return new MoneyConverter();
+        }
+    }
+
+    protected override IEnumerable<Type> TypeHierarchyBaseTypes
+    {
+        get
+        {
+            yield return typeof(ISharingStrategy);
+            yield return typeof(ATransaction);
+        }
+    }
+
+    class CurrencyConverter : JsonConverter<Currency>
+    {
+        // implementation
+    }
+
+    class MoneyConverter : JsonConverter<Money>
+    {
+        // implementation
+    }
+}
+```
+
+Basically, by overriding `AdditionalConverters` you can specify any additional custom converters you wish and by overriding `TypeHierarchyBaseTypes` you specify the root types of all your polymorph type hierarchies to be serialized.
+
+Once you got this, you can implement **Blazor.Mvu**s `ISerlializer` very simply:
+
+```csharp
+public class MyViewStateSerializer : ISerializer
+{
+    readonly MyGeneralSerializer _serializer;
+
+    public MyViewStateSerializer(MyGeneralSerializer serializer) => _serializer = serializer;
+
+    public string Serialize(object obj) => JsonConvert.SerializeObject(obj, _serializer.Settings);
+}
+```
 
 
-## Updater abstract helpers
+### Updater abstract helpers
 
 
-## Custom Controls
+### Custom Controls
