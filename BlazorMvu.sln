@@ -7,6 +7,13 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Blazor.Mvu", "Blazor.Mvu\Bl
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Blazor.Mvu.Autofac", "Blazor.Mvu.Autofac\Blazor.Mvu.Autofac.csproj", "{7F032CF8-861D-4742-A331-2C05269E0FD1}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{F8FE6A12-A688-4432-BCA0-03C381186180}"
+	ProjectSection(SolutionItems) = preProject
+		common.properties = common.properties
+		README.md = README.md
+		release.history = release.history
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
