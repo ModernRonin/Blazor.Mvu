@@ -68,7 +68,7 @@ So, you can use **Blazor.Mvu** with C#, and it is actually implemented in C#, to
 And last not least, as with any good framework, there is the design goal that using **Blazor.Mvu** should be comfortable, unsurprising and not require you to repeat yourself. 
 
 ## Dependencies
-**Blazor.Mvu** runs on NET 6 and for WebAssembly Blazor only. It does not support anything below NET5 and it won't work on server-hosted Blazor (probably - I never tried, but even if it does, it would probably be not very performant). It has only one dependency that your Blazor project will have in any case, `Microsoft.AspNetCore.Components.WebAssembly`.
+**Blazor.Mvu** runs on NET 6 and for WebAssembly Blazor only. It does not support anything below NET 6 and it won't work on server-hosted Blazor (probably - I never tried, but even if it does, it would probably be not very performant). It has only one dependency that your Blazor project will have in any case, `Microsoft.AspNetCore.Components.WebAssembly`.
 
 However, **Blazor.Mvu** used dependency injection a lot and requires that the container be able to resolve `Func<T>`s if `T` is resolvable. The standard container Blazor projects come with, `Microsoft.Extensions.DependencyInjection`, doesn't do this out-of-the-box. And because I personally never use that container, but [Autofac](https://autofac.readthedocs.io/en/latest/) instead (which doesn't have this limitation), you will currenly also have to use `Autofac`. 
 
