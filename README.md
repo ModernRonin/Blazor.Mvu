@@ -90,7 +90,7 @@ builder.ConfigureContainer(
     new AutofacServiceProviderFactory(b => b.RegisterModule(new MyModule())));
 ```
 
-where `ClientModule` is an Autofac module. In that module do your registrations as you normally would, but also add a line
+where `MyModule` is an Autofac module. In that module do your registrations as you normally would, but also add a line
 
 ```csharp
 builder.AddBlazorMvu(GetType().Assembly);
@@ -184,7 +184,7 @@ Let's look at a more complex example that combines *pages* and *components*:
 First create `Sandbox.razor`:
 ```razor
 @page "/sandbox"
-@using Pecuniae.Client.Logic.Sandbox
+@using Logic.Sandbox
 @inherits AStandardMvuPage<State, Updater, Logic.App.State>
 
 <h3>Sandbox</h3>
