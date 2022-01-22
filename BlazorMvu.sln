@@ -3,7 +3,25 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.32112.339
 MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Blazor.Mvu", "Blazor.Mvu\Blazor.Mvu.csproj", "{D60A40F8-D2A5-4B55-B2CD-70D253A10963}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Blazor.Mvu.Autofac", "Blazor.Mvu.Autofac\Blazor.Mvu.Autofac.csproj", "{7F032CF8-861D-4742-A331-2C05269E0FD1}"
+EndProject
 Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D60A40F8-D2A5-4B55-B2CD-70D253A10963}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D60A40F8-D2A5-4B55-B2CD-70D253A10963}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D60A40F8-D2A5-4B55-B2CD-70D253A10963}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D60A40F8-D2A5-4B55-B2CD-70D253A10963}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7F032CF8-861D-4742-A331-2C05269E0FD1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7F032CF8-861D-4742-A331-2C05269E0FD1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7F032CF8-861D-4742-A331-2C05269E0FD1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7F032CF8-861D-4742-A331-2C05269E0FD1}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection

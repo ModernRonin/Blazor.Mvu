@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<TargetFramework>net6.0</TargetFramework>
+		<ImplicitUsings>disable</ImplicitUsings>
+		<Description>Use Autofac with Blazor.Mvu</Description>
+		<PackageTags>blazor, mvu, autofac</PackageTags>
+		<Title>Blazor.Mvu.Autofac</Title>
+	</PropertyGroup>
+	<Import Project="../release.history" />
+	<Import Project="../common.properties" />
+	<ItemGroup>
+		<PackageReference Include="Autofac" Version="6.3.0" />
+		<PackageReference Include="Autofac.Extensions.DependencyInjection" Version="7.2.0" />
+	</ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\Blazor.Mvu\Blazor.Mvu.csproj" />
+	</ItemGroup>
+</Project>

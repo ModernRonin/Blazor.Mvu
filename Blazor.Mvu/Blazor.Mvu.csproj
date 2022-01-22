@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<TargetFramework>net6.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Description>Use the MVU pattern with Blazor in an C# idiomatic way</Description>
+		<PackageTags>blazor, mvu</PackageTags>
+		<Title>Blazor.Mvu</Title>
+	</PropertyGroup>
+	<Import Project="../release.history" />
+	<Import Project="../common.properties" />
+	<ItemGroup>
+		<PackageReference Include="Microsoft.AspNetCore.Components" Version="6.0.1" />
+	</ItemGroup>
+</Project>
