@@ -569,6 +569,253 @@ All log messages are logged to the browser's console.
 
 
 ### Updater abstract helpers
+So far, we've always directly implemented the diverse updater interfaces. However, there are a abstract base-classes for each of them that can make your life a little easier. They provide the following features:
+* instead of always having to implement initialization and update asynchronously, you can choose which you need, there are two versions of each method to override, one async, one not. It does not make sense at all to override both, but if you did, the async version would be used.
+* if you don't want to process any messages in your update method, you can just return `DontProcess(msg)`
+
+As an example, compare the following implementation from the tutorial:
+```csharp
+public class Updater : IComponentUpdater<State, AccountSettings>
+{
+    readonly ICurrencyProvider _currencyProvider;
+
+    public Updater(ICurrencyProvider currencyProvider) => _currencyProvider = currencyProvider;
+
+    public Task<State> InitializeAsync(AccountSettings value) =>
+        Task.FromResult(new(value ?? AccountSettings.Default,
+            () => _currencyProvider.AvailableCurrencies.ToImmutableArray()));
+
+    public override Task<State> UpdateAsync(State state, object msg) =>
+        Task.FromResult<TState>(msg switch
+        {
+            _ => default
+        });
+}
+```
+with
+```csharp
+public class Updater : AComponentUpdater<State, AccountSettings>
+{
+    readonly ICurrencyProvider _currencyProvider;
+
+    public Updater(ICurrencyProvider currencyProvider) => _currencyProvider = currencyProvider;
+
+    public override State Initialize(AccountSettings value) =>
+        new(value ?? AccountSettings.Default,
+            () => _currencyProvider.AvailableCurrencies.ToImmutableArray());
+
+    public override Task<State> UpdateAsync(State state, object msg) => DontProcess(msg);
+}
+```
+
+
+
 
 
 ### Custom Controls
+While neither Blazor nor **Blazor.Mvu** distinguish between custom controls and sub-views and they use the same mechanics, markup etc., in practice there are often differences. 
+
+What do I mean with this terms semantically? It's probably easiest to describe with examples:
+* a view that would allow to graphically split an amount into two or more parts would be a custom control
+* a view that allows entering a monetary amount, ie, a number with certain constraints together with a currency, would be a custom control
+* a view that groups together entry of a few form fields, say the contents of one tab in a tabbed settings page, would be a sub-view
+
+While it's hard to define exactly, there are a few heuristics to decide whether a view is a sub-view or a custom control:
+* does it allow editing of something that logically, semantically is used as a unit most of the time? 
+* is it going to be used in many places in the app?
+* does it seem plausible the same element could be used in other applications as well?
+
+Why do we need this distinction? Because custom controls tend to break the pattern of UI frameworks: while sub-views usually should not need any code-behind at all and in rare instances just a tiny bit, custom controls almost always need view-specific code. 
+
+This is true for **Blazor.Mvu** just as it is true for other frameworks, for example MVVM, independent of the platform. For example, in WPF, if you do it right, there is really no necessity to have any code in your views, you can define them exclusively via XAML, making clever use of converters and other static resources. All code can reside in your viewmodels. That is until you find yourself writing a custom control. If, in the example of the amount-divider from above, you want the user be able to drag a mark along a graphical bar representing the total, you will have to react to mouse-events and maybe do some manual drawing, and both are activities that are tightly bound to the technical foundation of your view. As such they have no place in the viewmodel, and will go into the code-behind.
+
+The same applies to **Blazor.Mvu** and in this section we'll see an example for how to implement a custom control with MVU mechanics.
+
+In the tutorial, we often saw an `<Undoable>` element referenced. The idea of this element is to allow the user to edit a field and directly save or discard any changes. So when the value changes, two buttons appear, one for saving the changed value, another for discarding the changes. 
+Additionally, in some situations we maybe want to prevent the user from saving values that do not pass certain constraints - so there must be a way to pass a validation function into the control. 
+And, last not least, we want the user to be able to save the value not just by clicking the save button, but also by pressing the "Enter" key.
+
+Because Blazor doesn't allow us to add properties to existing elements (like, for example, dependency properties in WPF or custom attributes in Aurelia), we can implement this only by creating a container element wrapping the actual field editor. This forces us however to provide the wrapped editor with a way of notifying our control when a value changes. So we get something like:
+```razor
+<Undoable T="string" Value="@State.Name" ValueChanged="Msg<string>(n => new UpdateName(n))">
+    <MudTextField Label="Name" Value="@context.Value" ValueChanged="context.HandleChange" 
+                  Immediate="true" DebounceInterval="150"/>
+</Undoable>
+```
+As we can see, the actual editor (the text field in this case) is wrapped inside an `<Undoable>`. Undoable binds to to the state property `Name` and triggers a message for changing this. The wrapped editor however binds to a value from the context provided to it by `Undoable` and also forwards changes to that context.
+
+So how is this implemented? Let's start with the logic, ie the canonical state, messages and updater:
+
+```csharp
+namespace Logic.Undoable;
+
+using Blazor.Mvu;
+
+public record State<T>(T Value, 
+                       T Original, 
+                       Func<T, bool> Validator, 
+                       Func<T, Task> HandleChange)
+    : IComponentState<T>
+{
+    public State<T> Reset() => this with { Value = Original };
+
+    public State<T> Save() => this with { Original = Value };
+
+    public bool IsDirty => !Value.Equals(Original);
+    public bool IsInvalid => !Validator(Value);
+}
+
+public record Save;
+
+public record Reset;
+
+public record ChangeValue<T>(T ChangedValue);
+
+public class Updater<T> : IComponentUpdater<State<T>, T>
+{
+    readonly IMessageReceiver _messageReceiver;
+    readonly Func<T, bool> _validator;
+
+    public Updater(IMessageReceiver messageReceiver, Func<T, bool> validator)
+    {
+        _validator = validator;
+        _messageReceiver = messageReceiver;
+    }
+
+    public Task<State<T>> InitializeAsync(T value)
+    {
+        return Task.FromResult(new State<T>(value, value, _validator, handleChange));
+
+        Task handleChange(T changedValue) =>
+            _messageReceiver.SendMessage(new ChangeValue<T>(changedValue), false).InvokeAsync();
+    }
+
+    public Task<State<T>> UpdateAsync(State<T> state, object msg) =>
+        Task.FromResult(msg switch
+        {
+            Save                  => state.Save(),
+            Reset                 => state.Reset(),
+            ChangeValue<T> change => state with { Value = change.ChangedValue },
+            _                     => default
+        });
+}
+```
+
+Our state consist of the value, the original value (so we can compare), the validator function and the callback provided to the wrapped editor for notifying about changed values.
+
+The messages and the updater's update function are self-explanatory.
+
+The updater's init function though is a bit more tricky: it sets `State.HandleChange` to a function that creates a `ChangeValue` message and invokes it via `IMessageReceiver`. What is `IMessageReceiver` and where does it come from? 
+
+The answer to the first question is, every MVU view implements `IMessageReceiver`, so `Undoable` does, too. And the `Undoable` view is exactly who should receive that `ChangeValue` message, so somehow it must get injected into the constructor of `Updater`. How this is done we see in the razor file for `Undoable`:
+
+```razor
+@typeparam T
+@using Logic.Undoable
+@inherits AComponentMvuView<State<T>, Updater<T>, T>
+
+<div @onkeypress="@(Filter<KeyboardEventArgs>(a => a.Key=="Enter").Msg(new Save()))">
+@ChildContent(State)
+</div>
+@if (State.IsDirty)
+{
+    <MudButtonGroup Size="Size.Small">
+        <MudIconButton Icon="@Icons.Filled.Save" OnClick="Msg(new Save())" Disabled="@(State.IsInvalid)"/>
+        <MudIconButton Icon="@Icons.Filled.Undo" OnClick="Msg(new Reset(), false)"/>
+    </MudButtonGroup>
+}
+
+@code
+{
+    protected override Updater<T> CreateUpdater() => new(this, OnValidate);
+
+    [Parameter]
+    public RenderFragment<State<T>> ChildContent { get; set; }
+
+    [Parameter]
+    public Func<T, bool> OnValidate { get; set; } = _ => true;
+
+}
+```
+As you can see (and as promised in the introduction ;-P), this view has substantial code in it. We'll explain all of it, but let's start with the question how the updater gets its message receiver.
+
+Up until now we've only seen views that magically create their updaters themselves, without any code on your part. `Undoable` however needs to pass itself to the updater and so it must customize that creation process. To that end, it inherits from `AComponentMvuView` instead of `AStandardComponentMvuView`. `AComponentMvuView` allows us to freely customize updater creation via the `CreateUpdater` factory method. (`AStandardComponentMvuView` just derives from `AComponentMvuView` and implements `CreateUpdater` using dependency injection.)
+
+This part is rather important. All views implement the interface `IMessageReceiver`. This interface allows you to send a message to the view from outside itself. But this comes at a cost. Let's look at the interface's definition:
+
+```csharp
+namespace Blazor.Mvu;
+
+using Microsoft.AspNetCore.Components;
+
+public interface IMessageReceiver
+{
+    EventCallback SendMessage(object msg, bool doPropagateOutsideComponent);
+}
+```
+
+As you can see, the interface has a dependency on Blazor, in the form of the `EventCallback` return type. So by making our updater depend on `IMessageReceiver`, we make it depend on Blazor. Up until now, all our updaters, state and message were completely independent of the technology stack used by the view. But if you need the ability to tell generate a message for a view from outside the view itself (or any other view contained within), you lose that independence. This may not be a problem at all if you don't plan on using your logic with any other view stack.
+
+The other interesting bit we see in the view is the use of `Filter`. We want to react on presses of the Enter key, but only that key. `Filter` allows you to filter any event arguments by a predicate of your choice and create a message from them only if the predicate is true. 
+
+This method
+* avoids leaking UI concepts like `KeyboardEventArgs` into the logic code, ie updaters
+* avoids the need for view code-behind files for these scenarios
+* avoids sending messages unnecessarily (as would be the case if the filtering happened in the updater)
+
+
+
+
+
+
+### Routing Parameters
+Sometimes you want pages to use routing parameters. The reason for this is that you want users be able to bookmark specific items. For example, say users of your app can work with a list of accounts. It makes sense to allow them to bookmark a specific account. In order for this to be possible, you must have a page like `@page "/account/{id}"`.
+
+(Note that you should not use routing parameters for other purposes. Sometimes people use routing parameters without any benefit for the user, merely as a way of passing data between views. If you find yourself doing this, you're doing it wrong. Instead, you should just update state at the right level of your application. Remember: **SPAs are applications more than websites, they just *happen* to run in a browser**.)
+
+How does this play together with **Blazor.Mvu**? How do you react to a routing parameter having been set/changed?
+
+Currently, the way to do this is by overriding the property `ParametersUpdatedMessage` and returning a message that you calculate from the routing parameter. For example, for the account view we mentioned this might look like:
+
+```razor
+@using Logic.Account
+@inherits AStandardMvuPage<State, Updater, Logic.App.State>
+@page "/account/{id}"
+
+<!-- markup -->
+
+@code {
+    [Parameter]
+    public string Id { get; set; }
+
+    protected override object ParametersUpdatedMessage => new SelectAccount(Id);
+}
+```
+
+Thus, whenever the route parameter is updated, a corresponding `SelectAccount` message will be fired.
+
+However, this will very likely change in the future. The problem with the current design is that, in the framework, we have no way of knowing which parameter was set. Blazor just doesn't tell us. That is why the property is called "**Parameters**UpdatedMessage". If it's overridden, it will be fired for any parameter change, not just changes to the routing parameter(s). In the given example, this is no problem because there are no other parameters. 
+
+Indeed, situations where it will be a problem ought to be rare: As routing parameters only can be used with pages and pages don't need parameters for bindable properties, the only scenario with  multiple parameters is probably when they all are route parameters. In that case, multiple messages will be generated. 
+
+Considering the nature of MVU, generating these multiple messages will not be a functional problem, but of course it is inefficient and simply unelegant.
+
+If you find yourself in a situation where this creates issues for you, the workaround currently is to turn your parameter properties from auto properties into properties with a backing field and set some flag in the setter. In your `ParametersUpdatedMessage` override you can check then which flag has been set to decide which message to send (and reset the flag.)
+
+Eventually, this problem will go away because I plan to create a custom router implementation for **Blazor.Mvu** that's more in line with MVU design and also frees you from littering your views with code. That implementation will not set any route parameters, but instead directly send messages. So the razor file above will change to:
+
+```razor
+@using Logic.Account
+@inherits AStandardMvuPage<State, Updater, Logic.App.State>
+@page "/account"
+
+<!-- markup -->
+```
+and somewhere in code (unrelated to any view) you'd define something like:
+```csharp
+OnRoute("/account/{id}").Send(id => new SelectAccount(Id)).To<Logic.Account>();
+```
+
+Replacing the existing router component in such a way as to not lose functionality or duplicate a lot of code is not easy, though, so it'll take some time until this feature comes. (Or maybe you want to help? :-))
+
+
