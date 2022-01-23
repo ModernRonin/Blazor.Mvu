@@ -9,7 +9,7 @@
 This is not production-ready yet. I'm using it in another free-time project of mine and only once that is released, I will consider **Blazor.Mvu** production-ready.
 
 However, I put this public and online in the hopes of finding other people who want to collaborate, for example by
-* trying to use this in their (not mission-critical!) Blazor apps and thus finding stuff that needs improvement in **Blazor.Mvu**
+* trying to use this in their (not mission-critical!) Blazor apps and along the way finding things in need of improvement in **Blazor.Mvu**
 * improving the convenience of the library via PRs (ideally, after a little bit of discussion first)
 * bugfix PRs
 * ideas and even better PRs how one could properly test-cover **Blazor.Mvu**
@@ -21,65 +21,62 @@ There are very good explanations of the MVU pattern out there, for example [here
 
 That being said, let me name a few important design goals that this pattern solves:
 
-> **Unidirectional data flow**
-> 
-> In traditional MVVM binding, you have one bi-directional data-flow between view and logic via two-way bindings. While this feels very nice in the beginning, with increasing complexity of the UI this very quickly starts to get messy, unless you are extremely disciplined.
->
->In MVU there are *two uni-directional flows* instead: logic to views via bindings and views to logic via messages. This distinction makes it much easier to understand what is going on by looking at views or logic in isolation. 
+### Unidirectional data flow
+In traditional MVVM binding, you have *one bi-directional data-flow* between view and logic via two-way bindings. While this feels comfortable in the beginning, with increasing complexity of the UI it lets to messy code, unless you are extremely disciplined.
+
+In MVU there are *two uni-directional flows* instead: logic to views via bindings and views to logic via messages. This distinction makes it easier to understand what is going on by looking at views or logic in isolation. 
 
 TODO: flesh this out with an example; something like select entry of a list for editing/removal 
 
-> **Immutability**
->
->Traditional MVVM requires mutable viewmodels to work. In MVU, we have two separate kinds of data, **state** and **messages**, both of which are immutable. 
->
->Generally, immutable data is easier to reason about, and in multi-threaded scenarios it avoids locking and the myriad of bugs/performance issues that go with that.
->
->Furthermore, it immutable state, when combined with deterministic behavior, allow us look at a user-session with an application as really just a sequence of states. This enables nifty features like going back in history and automatically replaying user-sessions. 
+### Immutability
+Traditional MVVM requires mutable viewmodels to work. In MVU, we have two separate kinds of data, **state** and **messages**, both of which are immutable. 
 
->**Separation of behavior from state**
->
->When OO languages started out, everybody felt that encapsulating state (aka data) together with the operations performed on said state was the way to go. I remember myself being rather excited about this when first encountering C++ in the mid 90ies. 
->
->However, a long time has passed since then (in terms of our understanding the process of creating software, anyway), and along the way our industry has been discovering that bundling state and behavior into one type is really suited just for a very specific subset of problem domains, most of them fairly low-level, for example implementing common data structures. Conversely, most other problem domains benefit more from an architecural approach that separates behavior from state. This is the reason why mainstream languages either add more and more functional features (like C# does) or are slowly superseded by more functional cousins (like Java by Scala and Kotlin).
->
->MVU separates behavior from state very strictly by making state immutable and putting behavior into an **update** function.
+Generally, immutable data is easier to reason about, and in multi-threaded scenarios it avoids locking and the myriad of bugs/performance issues coming with that.
+
+Furthermore, immutable state, when combined with deterministic behavior, allows us look at a user's in an application as really just a sequence of states. This enables nifty features like going back in history and automatically replaying user-sessions. 
+
+### Separation of behavior from state
+When OO languages started out, everybody felt that encapsulating state (aka data) together with the operations performed on said state was the way to go. I remember myself being rather excited about this when switching to Object Pascal and a bit later C++ in the mid 90ies. 
+
+However, a long time has passed since then (in terms of our understanding the process of creating software, anyway), and along the way our industry has discovered that bundling state and behavior into one type is really suited just for a very specific subset of problem domains, most of them fairly low-level, for example implementing common data structures. Conversely, most other problem domains benefit more from an architecural approach that separates behavior from state. This is the reason why mainstream languages either add more and more functional features (like C# does) or are slowly superseded by more functional cousins (like Java by Scala and Kotlin).
+
+MVU separates behavior from state very strictly by making state immutable and putting behavior into an **update** function.
 
 
 ## Design Goals
 Many implementations of MVU describe the view in code. Even the new [.NET MAUI](https://devblogs.microsoft.com/dotnet/introducing-net-multi-platform-app-ui/) implementation does this (much to my surprise).
 
-However, many developers have come to like describing the view in a declarative syntax, usually some XML dialect. There is considerable knowledge and tooling supporting that syntax. Furthermore, in particular when working on web apps, we often work together with designers who understand that kind of declarative syntax very well because they know HTML, but don't understand regular code at all. Describing the view in code throws away all these advantages.
+However, most developers have come to like describing the view in a declarative syntax, usually some XML dialect. There is considerable knowledge and tooling supporting that syntax. Furthermore, in particular when working on web apps, we often work together with designers who understand that kind of declarative syntax very well because they know HTML, but don't understand regular code at all. Describing the view in code throws away all these advantages.
 
-Thus, the probably most important design goal of **Blazor.Mvu** was and is to keep declarative syntax for views unchanged. In Blazor terms that means all the razor files you know and have continue to exist, with only minor adaptations that pertain to binding. 
+Thus, the probably most important design goal of **Blazor.Mvu** was to keep declarative syntax for views unchanged. In Blazor terms that means all the razor files you know and have continue to exist, with only minor adaptations that pertain to binding. 
 
-So, you can continue to use your existing tools and also make use of any future editors for Razor that might come out. You don't have to learn a new DSL just to describe a view. You can seamlessly integrate the myriads of component libraries out there. And your colleague, the designer, will be happy to hear that they still can understand and edit your views.
+So you can continue to use your existing tools and also make use of any future editors for Razor that might come out. You don't have to learn a new DSL just to describe a view. You can seamlessly integrate the myriads of component libraries out there. And your colleague, the designer, will be happy to hear that they still can understand and edit your views.
 
-Another design goal is almost as important: **Blazor.Mvu** should not force you to go all the way if you cannot or don't want to. In other words, it is possible to use **Blazor.Mvu** in three modes:
+Another design goal is almost as important: **Blazor.Mvu** should not force you to go all the way if you cannot or do not want to. In other words, it is possible to use **Blazor.Mvu** in three modes:
 
-* you create a greenfield application where all frameworks/components you use integrate easily with Blazor.Mvu: in this case, you just **Blazor.Mvu** for the whole application, including any custom controls you might create.
-* you create a greenfield application, but some of the components you use do not work with **Blazor.Mvu** (the reason for this can be when they somehow depend on your views inheriting from `ComponentBase` instead of another implementation of `IComponent` because **Blazor.Mvu** doesn't use `ComponentBase`); in this scenario, you can use **Blazor.Mvu** for all the parts where it makes sense and wrap the problematic components
-* you have an existing application and want to use **Blazor.Mvu** just for the new parts
+* you create a greenfield application where all frameworks/components you use integrate easily with Blazor.Mvu: in this case, you just **Blazor.Mvu** for the whole application
+* you create a greenfield application, but some of the components you use do not work with **Blazor.Mvu** (the reason for this can be when they depend on your views inheriting from `ComponentBase` instead of just implementing `IComponent` because **Blazor.Mvu** doesn't use `ComponentBase`); in this scenario, you can use **Blazor.Mvu** for all the parts where it makes sense and wrap the problematic components
+* you have an existing, brownfield application, you like the MVU concept, but you obviously can't invest the time to switch the whole code-base, so you want to use **Blazor.Mvu** just for the new parts
 
-Another very important goal is that using **Blazor.Mvu** does not require you to switch to a purely functional language like F#. While F# is super interesting and there are already very interesting MVU frameworks out for it, for example the excellent [Bolero](https://fsbolero.io/), the reality for 90% of developers is that they simply can't introduce another language into their workplace, no matter how beneficial it might be. 
+Another very important goal is that using **Blazor.Mvu** does not require you to switch to a purely functional language like F#. While F# is an awesome language and I'd encourage any .NET developer to learn it and play around with it, simply because learning and understanding F# will make you a better developer in general, the reality for the vast majority of developers is that they simply can't introduce another language into their workplace, no matter how beneficial it might be.  Besides, there are already quite a few plenty of MVU frameworks out there for F#, [Bolero](https://fsbolero.io/) and [Fabulous](https://github.com/fsprojects/Fabulous) probably amongst the more prominent of them.
 
-So, you can use **Blazor.Mvu** with C#, and it is actually implemented in C#, to ensure that usage of it will always stay idiomatic. However, in the future I hope to add F# wrappers that allow idiomatic use from F#, too. 
+You can use **Blazor.Mvu** with C#, and it is actually implemented in C#, to ensure usage will always stay idiomatic. However, in the future I hope to add F# wrappers allowing idiomatic use from F#, too. 
 
 And last not least, as with any good framework, there is the design goal that using **Blazor.Mvu** should be comfortable, unsurprising and not require you to repeat yourself. 
 
 ## Dependencies
-**Blazor.Mvu** runs on NET 6 and for WebAssembly Blazor only. It does not support anything below NET 6 and it won't work on server-hosted Blazor (probably - I never tried, but even if it does, it would probably be not very performant). It has only one dependency that your Blazor project will have in any case, `Microsoft.AspNetCore.Components.WebAssembly`.
+**Blazor.Mvu** runs on NET 6 and for WebAssembly Blazor only. It does not support anything below NET 6 and it won't work on server-hosted Blazor (probably - I actually never tried serrver-hosted Blazor because to my eyes this is more of a stop-gap solution; but even if it does work, that's not something you should rely on staying that way). It has only one dependency that your Blazor project will already have implicitly, too, `Microsoft.AspNetCore.Components.WebAssembly`.
 
-However, **Blazor.Mvu** used dependency injection a lot and requires that the container be able to resolve `Func<T>`s if `T` is resolvable. The standard container Blazor projects come with, `Microsoft.Extensions.DependencyInjection`, doesn't do this out-of-the-box. And because I personally never use that container, but [Autofac](https://autofac.readthedocs.io/en/latest/) instead (which doesn't have this limitation), you will currenly also have to use `Autofac`. 
+However, **Blazor.Mvu** uses dependency injection a lot and requires the container to be able to resolve `Func<T>`s if `T` is resolvable. The standard container Blazor projects come with, `Microsoft.Extensions.DependencyInjection`, doesn't do this out-of-the-box. And because I personally never use that container, but [Autofac](https://autofac.readthedocs.io/en/latest/) instead (which doesn't have this limitation), you will currenly also have to use `Autofac`. 
 
-In the future, this will be changed (maybe someone who's got more experience with `Microsoft.Extensions.DependencyInjection` wants to help?), and so the dependency on Autofac is kept in a separate package `Blazor.Mvu.Autofac`. While currently, you can use `Blazor.Mvu` only together with `Blazor.Mvu.Autofac`, at a later point in time you will be able to use it on its own and maybe there will be also integration packages for other popular containers like [Castle.Windsor](https://github.com/castleproject/Windsor) or  [Lamar](https://jasperfx.github.io/lamar/).
+In the future, this will be changed (maybe someone who's got more experience with `Microsoft.Extensions.DependencyInjection` wants to help?), and so the dependency on Autofac is kept in a separate package `Blazor.Mvu.Autofac`. While right now you can use `Blazor.Mvu` only together with `Blazor.Mvu.Autofac`, at a later point in time you will be able to use it on its own and maybe there will be integration packages for other popular containers, too, like for example [Castle.Windsor](https://github.com/castleproject/Windsor) or  [Lamar](https://jasperfx.github.io/lamar/).
 
 
 
-## How to use it
+## Tutorial: How to use it
 In the future, there will hopefully be code-samples in a separate repository, a nice documentation site with tutorials and proper XML documentation comments in the library itself. 
 
-For now, though, you will have to make do with a this section here. Please be patient, bear in mind that I coded the framework *and* my other project that I use as proof-of-concept within the space of my Christmas vacation and last not least, if you are interested, please get in touch and, if you can, collaborate :-)
+For now, though, you will have to make do with this section here. Please be patient, bear in mind that I coded the framework *and* my other project that I use as proof-of-concept within the space of my Christmas vacation and last not least, if you are interested, please get in touch and, if you can, collaborate :-)
 
 First of all, install the packages `Blazor.Mvu` and `Blazor.Mvu.Autofac`. 
 
